@@ -1810,7 +1810,8 @@ class Shrink(object):
                 delete_after=True, post_allocation={},
                 wait_for_active_shards=1, wait_for_rebalance=True,
                 extra_settings={}, wait_for_completion=True, wait_interval=9,
-                max_wait=-1):
+                max_wait=-1,
+                copy_settings=True):
         """
         :arg ilo: A :class:`curator.indexlist.IndexList` object
         :arg shrink_node: The node name to use as the shrink target, or
@@ -1846,6 +1847,8 @@ class Shrink(object):
             completion.
         :arg max_wait: Maximum number of seconds to `wait_for_completion`
         :type wait_for_completion: bool
+        :arg copy_settings: Copy source index settings to new index
+        :type copy_settings: bool
         """
         self.loggit = logging.getLogger('curator.actions.shrink')
         utils.verify_index_list(ilo)
@@ -1879,6 +1882,8 @@ class Shrink(object):
         self.max_wait         = max_wait
         #: Instance variable. Internal reference to `number_of_shards`
         self.number_of_shards = number_of_shards
+        #: Instance variable. Internal reference to `copy_settings`
+        self.copy_settings = copy_settings
         self.wait_for_active_shards = wait_for_active_shards
         self.shrink_node_name = None
         self.body = {
@@ -2124,7 +2129,13 @@ class Shrink(object):
                         self.loggit.info('DRY-RUN: Deleting source index "{0}"'.format(idx))
         except Exception as e:
             utils.report_failure(e)
-
+    def params(self):
+      copy_settings = "true"
+      if self.copy_settings == False: 
+        copy_settings = "false"
+      return {
+        "copy_settings": copy_settings
+      }
     def do_action(self):
         self.index_list.filter_closed()
         self.index_list.filter_by_shards(number_of_shards=self.number_of_shards)
@@ -2151,7 +2162,7 @@ class Shrink(object):
                     # Do the shrink
                     self.loggit.info('Shrinking index "{0}" to "{1}" with settings: {2}, wait_for_active_shards={3}'.format(idx, target, self.body, self.wait_for_active_shards))
                     try:
-                        self.client.indices.shrink(index=idx, target=target, body=self.body, wait_for_active_shards=self.wait_for_active_shards, params={ "copy_settings": True })
+                        self.client.indices.shrink(index=idx, target=target, body=self.body, wait_for_active_shards=self.wait_for_active_shards, params=self.params)
                         # Wait for it to complete
                         if self.wfc:
                             self.loggit.debug('Wait for shards to complete allocation for index: {0}'.format(target))
